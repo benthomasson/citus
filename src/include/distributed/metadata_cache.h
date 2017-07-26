@@ -19,6 +19,14 @@
 
 extern bool EnableVersionChecks;
 
+/* managed via guc.c */
+typedef enum
+{
+	USE_SECONDARY_NODES_NEVER = 0,
+	USE_SECONDARY_NODES_ALWAYS = 1
+} ReadFromSecondariesType;
+extern int ReadFromSecondaries;
+
 /*
  * Representation of a table's metadata that is frequently used for
  * distributed execution. Cached.
