@@ -159,7 +159,9 @@ $(EXTENSION)--7.0-9.sql: $(EXTENSION)--7.0-8.sql $(EXTENSION)--7.0-8--7.0-9.sql
 	cat $^ > $@
 $(EXTENSION)--7.0-10.sql: $(EXTENSION)--7.0-9.sql $(EXTENSION)--7.0-9--7.0-10.sql
 	cat $^ > $@
-
+$(EXTENSION)--7.0-10.sql: $(EXTENSION)--7.0-9.sql $(EXTENSION)--7.0-9--7.0-10.sql
+	cat $^ > $@
+	
 NO_PGXS = 1
 
 SHLIB_LINK = $(libpq)
