@@ -200,6 +200,27 @@ PG_FUNCTION_INFO_V1(master_dist_local_group_cache_invalidate);
 
 
 /*
+ * EnsureModificationsCanRun checks if the current node is in recovery mode or
+ * citus.use_secondary_nodes is 'alwaus'. If either is true the function errors out.
+ */
+void
+EnsureModificationsCanRun(void)
+{
+	if (RecoveryInProgress())
+	{
+		ereport(ERROR, (errmsg("writing to worker nodes is not currently allowed"),
+						errdetail("the database is in recovery mode")));
+	}
+
+	if (ReadFromSecondaries == USE_SECONDARY_NODES_ALWAYS)
+	{
+		ereport(ERROR, (errmsg("writing to worker nodes is not currently allowed"),
+						errdetail("citus.use_secondary_nodes is set to 'always'")));
+	}
+}
+
+
+/*
  * IsDistributedTable returns whether relationId is a distributed relation or
  * not.
  */

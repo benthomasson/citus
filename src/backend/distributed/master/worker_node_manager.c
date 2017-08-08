@@ -332,11 +332,7 @@ ActivePrimaryNodeList(void)
 	HTAB *workerNodeHash = GetWorkerNodeHash();
 	HASH_SEQ_STATUS status;
 
-	if (ReadFromSecondaries == USE_SECONDARY_NODES_ALWAYS)
-	{
-		ereport(ERROR, (errmsg("writing to nodes is not currently allowed"),
-						errdetail("citus.use_secondary_nodes is set to 'always'")));
-	}
+	EnsureModificationsCanRun();
 
 	hash_seq_init(&status, workerNodeHash);
 
