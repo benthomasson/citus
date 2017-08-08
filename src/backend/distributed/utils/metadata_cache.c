@@ -189,6 +189,7 @@ static ShardInterval * TupleToShardInterval(HeapTuple heapTuple,
 static void CachedRelationLookup(const char *relationName, Oid *cachedOid);
 static ShardPlacement * ResolveGroupShardPlacement(
 	GroupShardPlacement *groupShardPlacement, ShardCacheEntry *shardEntry);
+static WorkerNode * LookupNodeForGroup(uint32 groupid);
 
 
 /* exports for SQL callable functions */
@@ -452,22 +453,10 @@ ResolveGroupShardPlacement(GroupShardPlacement *groupShardPlacement,
 	DistTableCacheEntry *tableEntry = shardEntry->tableEntry;
 	int shardIndex = shardEntry->shardIndex;
 	ShardInterval *shardInterval = tableEntry->sortedShardIntervalArray[shardIndex];
-	bool groupContainsNodes = false;
 
 	ShardPlacement *shardPlacement = CitusMakeNode(ShardPlacement);
 	uint32 groupId = groupShardPlacement->groupId;
-	WorkerNode *workerNode = PrimaryNodeForGroup(groupId, &groupContainsNodes);
-
-	if (workerNode == NULL && !groupContainsNodes)
-	{
-		ereport(ERROR, (errmsg("there is a shard placement in node group %u but "
-							   "there are no nodes in that group", groupId)));
-	}
-
-	if (workerNode == NULL && groupContainsNodes)
-	{
-		ereport(ERROR, (errmsg("node group %u does not have a primary node", groupId)));
-	}
+	WorkerNode *workerNode = LookupNodeForGroup(groupId);
 
 	/* copy everything into shardPlacement but preserve the header */
 	memcpy((((CitusNode *) shardPlacement) + 1),
@@ -499,6 +488,68 @@ ResolveGroupShardPlacement(GroupShardPlacement *groupShardPlacement,
 	}
 
 	return shardPlacement;
+}
+
+
+/*
+ * LookupNodeForGroup searches the WorkerNodeHash for a worker which is a member of the
+ * given group and also readable (a primary if we're reading from primaries, a secondary
+ * if we're reading from secondaries). If such a node does not exist it emits an
+ * appropriate error message.
+ */
+static WorkerNode *
+LookupNodeForGroup(uint32 groupId)
+{
+	WorkerNode *workerNode = NULL;
+	HASH_SEQ_STATUS status;
+	HTAB *workerNodeHash = GetWorkerNodeHash();
+	bool foundAnyNodes = false;
+
+	hash_seq_init(&status, workerNodeHash);
+
+	while ((workerNode = hash_seq_search(&status)) != NULL)
+	{
+		uint32 workerNodeGroupId = workerNode->groupId;
+		if (workerNodeGroupId != groupId)
+		{
+			continue;
+		}
+
+		foundAnyNodes = true;
+
+		if (WorkerNodeIsReadable(workerNode))
+		{
+			hash_seq_term(&status);
+			return workerNode;
+		}
+	}
+
+	if (!foundAnyNodes)
+	{
+		ereport(ERROR, (errmsg("the metadata is inconsistent"),
+						errdetail("there is a shard placement in node group %u but "
+								  "there are no nodes in that group", groupId)));
+	}
+
+	switch (ReadFromSecondaries)
+	{
+		case USE_SECONDARY_NODES_NEVER:
+		{
+			ereport(ERROR, (errmsg("node group %u does not have a primary node",
+								   groupId)));
+		}
+
+		case USE_SECONDARY_NODES_ALWAYS:
+		{
+			ereport(ERROR, (errmsg("node group %u does not have a secondary node",
+								   groupId)));
+		}
+
+		default:
+		{
+			ereport(FATAL, (errmsg("unrecognized value for use_secondary_nodes")));
+		}
+	}
 }
 
 
