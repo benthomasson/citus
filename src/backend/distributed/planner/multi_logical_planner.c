@@ -1461,7 +1461,7 @@ HasUnsupportedReferenceTableJoin(PlannerRestrictionContext *plannerRestrictionCo
 				return true;
 			}
 		}
-		else if(joinType == JOIN_FULL)
+		else if (joinType == JOIN_FULL)
 		{
 			if (RelationInfoHasReferenceTable(plannerInfo, innerrel) ||
 				RelationInfoHasReferenceTable(plannerInfo, outerrel))
