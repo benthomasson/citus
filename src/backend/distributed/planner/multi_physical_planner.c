@@ -2121,7 +2121,6 @@ ErrorIfUnsupportedShardDistribution(Query *query)
 	{
 		Oid relationId = lfirst_oid(relationIdCell);
 		char partitionMethod = PartitionMethod(relationId);
-
 		if (partitionMethod == DISTRIBUTE_BY_RANGE)
 		{
 			rangeDistributedRelationCount++;
@@ -2142,7 +2141,7 @@ ErrorIfUnsupportedShardDistribution(Query *query)
 		else
 		{
 			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							errmsg("cannot pushdown this subquery"),
+							errmsg("cannot push down this subquery"),
 							errdetail("Currently append partitioned relations "
 									  "are not supported")));
 		}
