@@ -71,6 +71,7 @@ extern bool TryLockShardDistributionMetadata(int64 shardId, LOCKMODE lockMode);
 extern void LockShardResource(uint64 shardId, LOCKMODE lockmode);
 extern void UnlockShardResource(uint64 shardId, LOCKMODE lockmode);
 
+
 /* Lock a job schema or partition task directory */
 extern void LockJobResource(uint64 jobId, LOCKMODE lockmode);
 extern void UnlockJobResource(uint64 jobId, LOCKMODE lockmode);
@@ -80,5 +81,12 @@ extern void LockShardListMetadata(List *shardIntervalList, LOCKMODE lockMode);
 extern void LockShardListResources(List *shardIntervalList, LOCKMODE lockMode);
 extern void LockRelationShardResources(List *relationShardList, LOCKMODE lockMode);
 
+/* Lock parent table's colocated shard resource */
+extern void LockParentShardResourceIfPartition(uint64 shardId, LOCKMODE lockMode);
+extern void LockParentRelationShardResourcesIfPartition(List *relationShardList,
+														LOCKMODE lockMode);
+
+/* Lock partitions of partitioned table */
+extern void LockPartitionRelationsIfPartitioned(Oid relationId, LOCKMODE lockMode);
 
 #endif /* RESOURCE_LOCK_H */

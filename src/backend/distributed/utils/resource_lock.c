@@ -17,11 +17,13 @@
 #include "c.h"
 #include "miscadmin.h"
 
+#include "distributed/colocation_utils.h"
 #include "distributed/listutils.h"
 #include "distributed/master_metadata_utility.h"
 #include "distributed/metadata_cache.h"
-#include "distributed/multi_router_executor.h"
+#include "distributed/multi_partitioning_utils.h"
 #include "distributed/multi_planner.h"
+#include "distributed/multi_router_executor.h"
 #include "distributed/relay_utility.h"
 #include "distributed/resource_lock.h"
 #include "distributed/shardinterval_utils.h"
@@ -313,6 +315,87 @@ LockRelationShardResources(List *relationShardList, LOCKMODE lockMode)
 		if (shardId != INVALID_SHARD_ID)
 		{
 			LockShardResource(shardId, lockMode);
+		}
+	}
+}
+
+
+/*
+ * LockParentShardResourceIfPartition acquires a shard resource lock on colocated
+ * shard of parent table of given shard's relation if given shard belongs to a
+ * partition.
+ */
+void
+LockParentShardResourceIfPartition(uint64 shardId, LOCKMODE lockMode)
+{
+	ShardInterval *shardInterval = LoadShardInterval(shardId);
+	Oid relationId = shardInterval->relationId;
+
+	if (PartitionTable(relationId))
+	{
+		int shardIndex = ShardIndex(shardInterval);
+		Oid parentRelationId = PartitionParentOid(relationId);
+		uint64 parentShardId = ColocatedShardIdInRelation(parentRelationId, shardIndex);
+
+		LockShardResource(parentShardId, lockMode);
+	}
+}
+
+
+/*
+ * LockParentRelationShardResourcesIfPartition acquires a shard resource lock on
+ * colocated shard of parent tables of given shards' relation if given shard
+ * belongs to a partition.
+ */
+void
+LockParentRelationShardResourcesIfPartition(List *relationShardList, LOCKMODE lockMode)
+{
+	ListCell *relationShardCell = NULL;
+
+	/* lock shards in a consistent order to prevent deadlock */
+	relationShardList = SortList(relationShardList, CompareRelationShards);
+
+	foreach(relationShardCell, relationShardList)
+	{
+		RelationShard *relationShard = (RelationShard *) lfirst(relationShardCell);
+		uint64 shardId = relationShard->shardId;
+		Oid relationId = relationShard->relationId;
+
+		if (shardId != INVALID_SHARD_ID && PartitionTable(relationId))
+		{
+			Oid parentRelationId = PartitionParentOid(relationId);
+			ShardInterval *shardInterval = LoadShardInterval(shardId);
+			int shardIndex = ShardIndex(shardInterval);
+			uint64 parentShardId = ColocatedShardIdInRelation(parentRelationId,
+															  shardIndex);
+
+			LockShardResource(parentShardId, lockMode);
+		}
+	}
+}
+
+
+/*
+ * LockPartitionRelationsIfPartitioned acquires a lock on all partitions of
+ * given relation if that relation is a partitioned table.
+ */
+void
+LockPartitionRelationsIfPartitioned(Oid relationId, LOCKMODE lockMode)
+{
+	if (PartitionedTable(relationId))
+	{
+		/*
+		 * PartitionList function generates partition list in the same order
+		 * as PostgreSQL. Therefore we do not need to sort it before acquiring
+		 * locks.
+		 */
+		List *partitionList = PartitionList(relationId);
+		ListCell *partitionCell = NULL;
+
+		foreach(partitionCell, partitionList)
+		{
+			Oid partitionRelationId = lfirst_oid(partitionCell);
+			LockRelationOid(partitionRelationId, lockMode);
 		}
 	}
 }

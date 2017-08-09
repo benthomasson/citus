@@ -39,6 +39,7 @@
 #include "distributed/placement_connection.h"
 #include "distributed/relay_utility.h"
 #include "distributed/remote_commands.h"
+#include "distributed/resource_lock.h"
 #include "distributed/worker_protocol.h"
 #include "distributed/worker_transaction.h"
 #include "lib/stringinfo.h"

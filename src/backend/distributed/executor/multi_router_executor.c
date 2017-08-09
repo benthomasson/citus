@@ -295,6 +295,7 @@ AcquireExecutorMultiShardLocks(List *taskList)
 			lockMode = ExclusiveLock;
 		}
 
+		LockParentShardResourceIfPartition(task->anchorShardId, lockMode);
 		LockShardResource(task->anchorShardId, lockMode);
 
 		/*
@@ -311,7 +312,8 @@ AcquireExecutorMultiShardLocks(List *taskList)
 			 * and therefore prevents other modifications from running
 			 * concurrently.
 			 */
-
+			LockParentRelationShardResourcesIfPartition(task->relationShardList,
+														ExclusiveLock);
 			LockRelationShardResources(task->relationShardList, ExclusiveLock);
 		}
 	}
@@ -678,6 +680,9 @@ ExecuteSingleModifyTask(CitusScanState *scanState, Task *task, bool expectResult
 	bool startedInTransaction =
 		InCoordinatedTransaction() && XactModificationLevel == XACT_MODIFICATION_DATA;
 
+	ShardInterval *shardInterval = LoadShardInterval(task->anchorShardId);
+	Oid relationId = shardInterval->relationId;
+
 	/*
 	 * Modifications for reference tables are always done using 2PC. First
 	 * ensure that distributed transaction is started. Then force the
@@ -709,6 +714,12 @@ ExecuteSingleModifyTask(CitusScanState *scanState, Task *task, bool expectResult
 	connectionList = GetModifyConnections(task,
 										  taskRequiresTwoPhaseCommit,
 										  startedInTransaction);
+
+	/*
+	 * If we are dealing with partitioned table, we also need to lock its
+	 * partitions.
+	 */
+	LockPartitionRelationsIfPartitioned(relationId, RowExclusiveLock);
 
 	/* prevent replicas of the same shard from diverging */
 	AcquireExecutorShardLock(task, operation);
@@ -961,6 +972,19 @@ ExecuteModifyTasks(List *taskList, bool expectResults, ParamListInfo paramListIn
 	if (taskList == NIL)
 	{
 		return 0;
+	}
+
+	foreach(taskCell, taskList)
+	{
+		Task *task = (Task *) lfirst(taskCell);
+		ShardInterval *shardInterval = LoadShardInterval(task->anchorShardId);
+		Oid relationId = shardInterval->relationId;
+
+		/*
+		 * If we are dealing with partitioned table, we also need to lock its
+		 * partitions.
+		 */
+		LockPartitionRelationsIfPartitioned(relationId, RowExclusiveLock);
 	}
 
 	/* ensure that there are no concurrent modifications on the same shards */
