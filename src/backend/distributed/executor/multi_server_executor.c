@@ -71,10 +71,7 @@ JobExecutorType(MultiPlan *multiPlan)
 												 " queries on the workers.")));
 	}
 
-	if (multiPlan->operation != CMD_SELECT)
-	{
-		ereport(FATAL, (errmsg("we assume only SELECT queries hit this point")));
-	}
+	Assert(multiPlan->operation == CMD_SELECT);
 
 	workerNodeList = ActiveReadableNodeList();
 	workerNodeCount = list_length(workerNodeList);
