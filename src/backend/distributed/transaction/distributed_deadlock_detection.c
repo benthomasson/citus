@@ -29,6 +29,9 @@
 /* GUC, determining whether debug messages for deadlock detection sent to LOG */
 bool LogDistributedDeadlockDetection = false;
 
+/* we access local group quite heavily, thus cache it via a local variable */
+static int localGroupId = -1;
+
 static bool CheckDeadlockForTransactionNode(TransactionNode *startingTransactionNode,
 											TransactionNode **transactionNodeStack,
 											List **deadlockPath);
@@ -96,6 +99,12 @@ CheckForDistributedDeadlocks(void)
 	TransactionNode *transactionNode = NULL;
 	int edgeCount = waitGraph->edgeCount;
 
+	/* avoid calling GetLocalGroup() many times by caching it */
+	if (localGroupId == -1)
+	{
+		localGroupId = GetLocalGroupId();
+	}
+
 	LogDistributedDeadlockDebugMessage("Distributed deadlock detection starts");
 	LogAdjacencyLists(adjacencyLists);
 
@@ -111,7 +120,7 @@ CheckForDistributedDeadlocks(void)
 		TransactionNode *transactionNodeStack[edgeCount];
 
 		/* we're only interested in finding deadlocks originating from this node */
-		if (transactionNode->transactionId.initiatorNodeIdentifier != GetLocalGroupId())
+		if (transactionNode->transactionId.initiatorNodeIdentifier != localGroupId)
 		{
 			continue;
 		}
@@ -154,8 +163,7 @@ CheckForDistributedDeadlocks(void)
 
 				LogTransactionNode(currentNode);
 
-				if (currentNode->transactionId.initiatorNodeIdentifier ==
-					GetLocalGroupId() &&
+				if (currentNode->transactionId.initiatorNodeIdentifier == localGroupId &&
 					timestamptz_cmp_internal(currentTimestamp, youngestTimestamp) == 1)
 				{
 					youngestTransaction = currentNode;
@@ -356,7 +364,7 @@ AssocateDistributedTransactionWithBackendProc(TransactionNode *transactionNode)
 		}
 
 		/* at the point we should only have transactions initiated by this node */
-		Assert(currentTransactionId->initiatorNodeIdentifier == GetLocalGroupId());
+		Assert(currentTransactionId->initiatorNodeIdentifier == localGroupId);
 
 		transactionNode->initiatorProc = currentProc;
 
