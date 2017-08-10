@@ -53,7 +53,6 @@ static int DistributedTransactionIdCompareHash(const void *a, const void *b, Siz
 static int DistributedTransactionIdCompare(const void *a, const void *b);
 static void LogCancellingBackend(TransactionNode *transactionNode);
 static void LogTransactionNode(TransactionNode *transactionNode);
-static void LogAdjacencyLists(HTAB *adjacencyLists);
 static void LogDistributedDeadlockDebugMessage(const char *errorMessage);
 
 
@@ -104,9 +103,6 @@ CheckForDistributedDeadlocks(void)
 	{
 		localGroupId = GetLocalGroupId();
 	}
-
-	LogDistributedDeadlockDebugMessage("Distributed deadlock detection starts");
-	LogAdjacencyLists(adjacencyLists);
 
 	/*
 	 * We iterate on transaction nodes and search for deadlocks where the
@@ -181,8 +177,6 @@ CheckForDistributedDeadlocks(void)
 			return true;
 		}
 	}
-
-	LogDistributedDeadlockDebugMessage("No distributed deadlocks found");
 
 	return false;
 }
@@ -547,56 +541,11 @@ DistributedTransactionIdCompare(const void *a, const void *b)
 
 
 /*
- * Iterates over the given adjacency lists and sends them to the logs via
- * LogDistributedDeadlockDebugMessage().
- */
-static void
-LogAdjacencyLists(HTAB *adjacencyLists)
-{
-	HASH_SEQ_STATUS debugStatus;
-	TransactionNode *transactionNode = NULL;
-	int processedEntryCount = 0;
-
-	if (!LogDistributedDeadlockDetection)
-	{
-		return;
-	}
-
-
-	/* iterate on all nodes */
-	hash_seq_init(&debugStatus, adjacencyLists);
-
-	while ((transactionNode = (TransactionNode *) hash_seq_search(&debugStatus)) != 0)
-	{
-		++processedEntryCount;
-		if (processedEntryCount == 1)
-		{
-			LogDistributedDeadlockDebugMessage(
-				"----------Adjacency lists starts----------");
-		}
-
-		LogTransactionNode(transactionNode);
-	}
-
-	if (processedEntryCount != 0)
-	{
-		LogDistributedDeadlockDebugMessage("----------Adjacency lists ends----------");
-	}
-	else
-	{
-		LogDistributedDeadlockDebugMessage("No dependencies exist among distributed "
-										   "transactions");
-	}
-}
-
-
-/*
  * LogCancellingBackend should only be called when a distributed transaction's
  * backend is cancelled due to distributed deadlocks. It sends which transaction
  * is cancelled and its corresponding pid to the log.
  */
-static
-void
+static void
 LogCancellingBackend(TransactionNode *transactionNode)
 {
 	StringInfo logMessage = NULL;
