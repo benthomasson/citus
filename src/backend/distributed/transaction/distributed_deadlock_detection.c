@@ -98,7 +98,7 @@ CheckForDistributedDeadlocks(void)
 	TransactionNode *transactionNode = NULL;
 	int edgeCount = waitGraph->edgeCount;
 
-	/* avoid calling GetLocalGroup() many times by caching it */
+	/* avoid calling GetLocalGroup() many times by caching for the session */
 	if (localGroupId == -1)
 	{
 		localGroupId = GetLocalGroupId();
@@ -116,7 +116,7 @@ CheckForDistributedDeadlocks(void)
 		TransactionNode *transactionNodeStack[edgeCount];
 
 		/* we're only interested in finding deadlocks originating from this node */
-		if (transactionNode->transactionId.initiatorNodeIdentifier != localGroupId)
+		if (!transactionNode->transactionId.transcationStartedOnNode)
 		{
 			continue;
 		}
@@ -359,6 +359,7 @@ AssocateDistributedTransactionWithBackendProc(TransactionNode *transactionNode)
 
 		/* at the point we should only have transactions initiated by this node */
 		Assert(currentTransactionId->initiatorNodeIdentifier == localGroupId);
+		Assert(currentTransactionId->transcationStartedOnNode);
 
 		transactionNode->initiatorProc = currentProc;
 
@@ -416,12 +417,14 @@ BuildAdjacencyListsForWaitGraph(WaitGraph *waitGraph)
 		TransactionNode *blockingTransaction = NULL;
 
 		DistributedTransactionId waitingId = {
+			false,
 			edge->waitingNodeId,
 			edge->waitingTransactionNum,
 			edge->waitingTransactionStamp
 		};
 
 		DistributedTransactionId blockingId = {
+			false,
 			edge->blockingNodeId,
 			edge->blockingTransactionNum,
 			edge->blockingTransactionStamp
