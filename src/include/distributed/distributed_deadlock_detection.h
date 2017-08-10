@@ -30,11 +30,17 @@ typedef struct TransactionNode
 	/* backend that is on the initiator node */
 	PGPROC *initiatorProc;
 
-	/* used only for finding the deadlock cycle path */
-	int currentStackDepth;
-
 	bool transactionVisited;
 } TransactionNode;
+
+typedef struct QueuedTransactionNode
+{
+	TransactionNode *transactionNode;
+
+	/* used only for finding the deadlock cycle path */
+	int currentStackDepth;
+} QueuedTransactionNode;
+
 
 /* GUC, determining whether debug messages for deadlock detection sent to LOG */
 extern bool LogDistributedDeadlockDetection;

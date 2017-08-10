@@ -274,11 +274,13 @@ CitusMaintenanceDaemonMain(Datum main_arg)
 
 		/*
 		 * If we find any deadlocks, run the distributed deadlock detection
-		 * more often since it is likely that that are other deadlocks needs to
-		 * be resolved. Thus, we use 1/20 of the calculated value. With the default
+		 * more often since it is quite possible that there are other
+		 * deadlocks needs to be resolved.
+		 *
+		 * Thus, we use 1/20 of the calculated value. With the default
 		 * values (i.e., deadlock_timeout 1 seconds,
 		 * citus.distributed_deadlock_detection_factor 2), we'd be able to cancel
-		 * ~10 distributed deadlocks.
+		 * ~10 distributed deadlocks per second.
 		 */
 		timeout = DistributedDeadlockDetectionTimeoutFactor * DeadlockTimeout;
 		if (foundDeadlock)

@@ -236,12 +236,14 @@ push(@pgOptions, '-c', "citus.remote_task_check_interval=1ms");
 push(@pgOptions, '-c', "citus.shard_replication_factor=2");
 push(@pgOptions, '-c', "citus.node_connection_timeout=${connectionTimeout}");
 
+# disable automatic distributed deadlock detection during the isolation testing
+# to make sure that we always get consistent test outputs. If we don't  manually
+# (i.e., calling a UDF) detect the deadlocks, some sessions that do not participate
+# in the deadlock may interleave with the deadlock detection, which results in non-
+# consistent test outputs. 
 if($isolationtester)
 {
    push(@pgOptions, '-c', "citus.log_distributed_deadlock_detection=on");
-
-# disable automatic distributed deadlock detection, 
-# we're going to manually detect the deadlocks
    push(@pgOptions, '-c', "citus.distributed_deadlock_detection_factor=1000");
 }
 

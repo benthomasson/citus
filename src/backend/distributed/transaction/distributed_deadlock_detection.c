@@ -32,8 +32,12 @@ bool LogDistributedDeadlockDetection = false;
 static bool CheckDeadlockForTransactionNode(TransactionNode *startingTransactionNode,
 											TransactionNode **transactionNodeStack,
 											List **deadlockPath);
-static void FindDeadlockPath(TransactionNode *cycledTransactionNode,
-							 TransactionNode **transactionNodeStack, List **deadlockPath);
+static void PrependOutgoingNodesToQueue(TransactionNode *queuedTransactionNode,
+										int currentStackDepth,
+										List **toBeVisitedNodes);
+static void BuildDeadlockPathList(QueuedTransactionNode *cycledTransactionNode,
+								  TransactionNode **transactionNodeStack,
+								  List **deadlockPath);
 static void ResetVisitedFields(HTAB *adjacencyList);
 static void AssocateDistributedTransactionWithBackendProc(TransactionNode *
 														  transactionNode);
@@ -190,76 +194,51 @@ CheckDeadlockForTransactionNode(TransactionNode *startingTransactionNode,
 								TransactionNode **transactionNodeStack,
 								List **deadlockPath)
 {
-	List *waitingTransactionNodes = list_copy(startingTransactionNode->waitsFor);
+	List *toBeVisitedNodes = NIL;
 	int currentStackDepth = 0;
-	ListCell *waitingTransactionCell = NULL;
 
 	/*
 	 * We keep transactionNodeStack to keep track of the deadlock paths. At this point,
 	 * adjust the depth of the starting node and set the stack's first element with
 	 * the starting node.
 	 */
-	startingTransactionNode->currentStackDepth = currentStackDepth;
 	transactionNodeStack[currentStackDepth] = startingTransactionNode;
 
-	/* iterate on the children of the starting node and set their depths */
-	foreach(waitingTransactionCell, waitingTransactionNodes)
-	{
-		TransactionNode *waitingTransactionNode =
-			(TransactionNode *) lfirst(waitingTransactionCell);
-
-		waitingTransactionNode->currentStackDepth =
-			startingTransactionNode->currentStackDepth + 1;
-	}
+	PrependOutgoingNodesToQueue(startingTransactionNode, currentStackDepth,
+								&toBeVisitedNodes);
 
 	/* traverse the graph and search for the deadlocks */
-	while (waitingTransactionNodes != NIL)
+	while (toBeVisitedNodes != NIL)
 	{
-		TransactionNode *waitingTransactionNode =
-			(TransactionNode *) linitial(waitingTransactionNodes);
-		ListCell *currentWaitForCell = NULL;
+		QueuedTransactionNode *queuedTransactionNode =
+			(QueuedTransactionNode *) linitial(toBeVisitedNodes);
+		TransactionNode *currentTransactionNode = queuedTransactionNode->transactionNode;
 
-		waitingTransactionNodes = list_delete_first(waitingTransactionNodes);
+		toBeVisitedNodes = list_delete_first(toBeVisitedNodes);
 
 		/* cycle found, let the caller know about the cycle */
-		if (waitingTransactionNode == startingTransactionNode)
+		if (currentTransactionNode == startingTransactionNode)
 		{
-			FindDeadlockPath(waitingTransactionNode, transactionNodeStack, deadlockPath);
+			BuildDeadlockPathList(queuedTransactionNode, transactionNodeStack,
+								  deadlockPath);
 
 			return true;
 		}
 
 		/* don't need to revisit the node again */
-		if (waitingTransactionNode->transactionVisited)
+		if (currentTransactionNode->transactionVisited)
 		{
 			continue;
 		}
 
-		waitingTransactionNode->transactionVisited = true;
+		currentTransactionNode->transactionVisited = true;
 
 		/* set the stack's corresponding element with the current node */
-		currentStackDepth = waitingTransactionNode->currentStackDepth;
-		transactionNodeStack[currentStackDepth] = waitingTransactionNode;
+		currentStackDepth = queuedTransactionNode->currentStackDepth;
+		transactionNodeStack[currentStackDepth] = currentTransactionNode;
 
-		/* as we traverse outgoing edges, increment the depth */
-		currentStackDepth++;
-
-		/* prepend to the list to continue depth-first search */
-		foreach(currentWaitForCell, waitingTransactionNode->waitsFor)
-		{
-			TransactionNode *waitForTransaction =
-				(TransactionNode *) lfirst(currentWaitForCell);
-
-			/*
-			 * We add both the waiting node and its parent to simplify finding the
-			 * deadlock path.
-			 */
-			waitingTransactionNodes =
-				lcons(waitingTransactionNode, waitingTransactionNodes);
-
-			waitForTransaction->currentStackDepth = currentStackDepth;
-			waitingTransactionNodes = lcons(waitForTransaction, waitingTransactionNodes);
-		}
+		PrependOutgoingNodesToQueue(currentTransactionNode, currentStackDepth,
+									&toBeVisitedNodes);
 	}
 
 	return false;
@@ -267,17 +246,46 @@ CheckDeadlockForTransactionNode(TransactionNode *startingTransactionNode,
 
 
 /*
- * FindDeadlockPath gets the transaction node on which the cycle is found. Later,
- * we add the depth number of elements of the cycled node from the transaction
- * stack to the deadlockPath.
+ * PrependOutgoingNodesToQueue prepends the waiters of the input transaction nodes to the
+ * toBeVisitedNodes.
  */
 static void
-FindDeadlockPath(TransactionNode *cycledTransactionNode,
-				 TransactionNode **transactionNodeStack,
-				 List **deadlockPath)
+PrependOutgoingNodesToQueue(TransactionNode *transactionNode, int currentStackDepth,
+							List **toBeVisitedNodes)
+{
+	ListCell *currentWaitForCell = NULL;
+
+	/* as we traverse outgoing edges, increment the depth */
+	currentStackDepth++;
+
+	/* prepend to the list to continue depth-first search */
+	foreach(currentWaitForCell, transactionNode->waitsFor)
+	{
+		TransactionNode *waitForTransaction =
+			(TransactionNode *) lfirst(currentWaitForCell);
+		QueuedTransactionNode *queuedNode = palloc0(sizeof(QueuedTransactionNode));
+
+		queuedNode->transactionNode = waitForTransaction;
+		queuedNode->currentStackDepth = currentStackDepth;
+
+		*toBeVisitedNodes = lappend(*toBeVisitedNodes, queuedNode);
+	}
+}
+
+
+/*
+ * BuildDeadlockPathList fills deadlockPath with a list of transactions involved
+ * in a distributed deadlock (i.e. a cycle in the graph).
+ */
+static void
+BuildDeadlockPathList(QueuedTransactionNode *cycledTransactionNode,
+					  TransactionNode **transactionNodeStack,
+					  List **deadlockPath)
 {
 	int deadlockStackDepth = cycledTransactionNode->currentStackDepth;
 	int stackIndex = 0;
+
+	*deadlockPath = NIL;
 
 	for (stackIndex = 0; stackIndex < deadlockStackDepth; stackIndex++)
 	{
