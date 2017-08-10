@@ -546,7 +546,8 @@ DeferErrorIfUnsupportedSubqueryPushdown(Query *originalQuery,
 	{
 		return DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
 							 "cannot pushdown the subquery",
-							 "There exist a reference table in the outer part of the outer join",
+							 "There exist a reference table in the outer part of the "
+							 "outer join",
 							 NULL);
 	}
 
@@ -1428,15 +1429,17 @@ MultiPlanTree(Query *queryTree)
  * HasUnsupportedReferenceTableJoin returns true if there exists a outer join
  * between reference table and distributed tables which does not follow
  * the rules :
- * - Reference tables can not be located in the outer part of the semi join (or
- * the inner part of the anti join). Otherwise, we may have duplicate results.
- * Although getting duplicate results is not possible by checking the equality
- * on the column of the reference table and partition column of distributed table,
- * we still keep these checks. Because, using the reference table in the outer
- * part of the semi join is not very common.
- * - Reference tables can not be located in the outer part of the left join.
- * Otherwise we will definitely have duplicate rows. Beside, reference tables
- * can not be used with full outer joins because of the same reason.
+ * - Reference tables can not be located in the outer part of the semi join or the
+ * anti join. Otherwise, we may have duplicate results. Although getting duplicate
+ * results is not possible by checking the equality on the column of the reference
+ * table and partition column of distributed table, we still keep these checks.
+ * Because, using the reference table in the outer part of the semi join or anti
+ * join is not very common.
+ * - Reference tables can not be located in the outer part of the left join and
+ * the inner part of the right join. (Note that PostgreSQL generally convert right
+ * joins to left joins.) Otherwise we will definitely have duplicate rows. Beside,
+ * reference tables can not be used with full outer joins because of the same
+ * reason.
  */
 static bool
 HasUnsupportedReferenceTableJoin(PlannerRestrictionContext *plannerRestrictionContext)
@@ -1457,6 +1460,13 @@ HasUnsupportedReferenceTableJoin(PlannerRestrictionContext *plannerRestrictionCo
 		if (joinType == JOIN_SEMI || joinType == JOIN_ANTI || joinType == JOIN_LEFT)
 		{
 			if (RelationInfoHasReferenceTable(plannerInfo, outerrel))
+			{
+				return true;
+			}
+		}
+		else if (joinType == JOIN_RIGHT)
+		{
+			if (RelationInfoHasReferenceTable(plannerInfo, innerrel))
 			{
 				return true;
 			}
@@ -1510,7 +1520,7 @@ HasReferenceTable(Node *node)
 {
 	List *relationList = NIL;
 	ListCell *relationCell = NULL;
-	ExtractRangeTableRelationWalkerWithRTESupport(node, &relationList);
+	ExtractRangeTableRelationWalkerWithRTEExpand(node, &relationList);
 
 	foreach(relationCell, relationList)
 	{
@@ -2894,13 +2904,13 @@ ExtractRangeTableRelationWalker(Node *node, List **rangeTableRelationList)
 
 
 /*
- * ExtractRangeTableRelationWalkerWithRTESupport obtains the list of relations
+ * ExtractRangeTableRelationWalkerWithRTEExpand obtains the list of relations
  * from the given node. Note that the difference between this function and
  * ExtractRangeTableRelationWalker is that this one recursively
  * walk into range table entries if it can.
  */
 bool
-ExtractRangeTableRelationWalkerWithRTESupport(Node *node, List **rangeTableRelationList)
+ExtractRangeTableRelationWalkerWithRTEExpand(Node *node, List **rangeTableRelationList)
 {
 	bool walkIsComplete = false;
 
@@ -2920,7 +2930,7 @@ ExtractRangeTableRelationWalkerWithRTESupport(Node *node, List **rangeTableRelat
 		else
 		{
 			walkIsComplete = range_table_walker(rangeTableList,
-												ExtractRangeTableRelationWalkerWithRTESupport,
+												ExtractRangeTableRelationWalkerWithRTEExpand,
 												rangeTableRelationList, 0);
 		}
 	}

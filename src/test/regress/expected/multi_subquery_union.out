@@ -992,3 +992,5 @@ ORDER BY types;
 ERROR:  cannot push down this subquery
 DETAIL:  Subqueries without relations are unsupported
 SET citus.enable_router_execution TO true;
+DROP TABLE events_reference_table;
+DROP TABLE users_reference_table;

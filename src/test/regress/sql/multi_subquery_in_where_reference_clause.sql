@@ -40,6 +40,42 @@ GROUP BY user_id
 ORDER BY user_id
 LIMIT 3;
 
+-- subqueries in WHERE with NOT EXISTS operator, should work since
+-- reference table in the inner part of the join
+SELECT 
+  user_id
+FROM 
+  users_table
+WHERE 
+  NOT EXISTS  
+      (SELECT 
+          value_2 
+       FROM 
+          events_reference_table  
+       WHERE 
+          users_table.user_id = events_reference_table.user_id
+      )
+GROUP BY user_id
+ORDER BY user_id
+LIMIT 3;
+
+-- subqueries in WHERE with NOT EXISTS operator, should not work
+-- there is a reference table in the outer part of the join
+SELECT 
+  user_id
+FROM 
+  users_reference_table
+WHERE 
+  NOT EXISTS  
+      (SELECT 
+          value_2 
+       FROM 
+          events_table  
+       WHERE 
+          users_reference_table.user_id = events_table.user_id
+      )
+LIMIT 3;
+
 -- subqueries in WHERE with IN operator without equality
 SELECT 
   user_id

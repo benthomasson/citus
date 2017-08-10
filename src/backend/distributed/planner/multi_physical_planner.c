@@ -2111,7 +2111,7 @@ ErrorIfUnsupportedShardDistribution(Query *query)
 {
 	Oid firstTableRelationId = InvalidOid;
 	List *relationIdList = RelationIdList(query);
-	List *distributedRelationIdList = NIL;
+	List *partitionedRelationIdList = NIL;
 	ListCell *relationIdCell = NULL;
 	uint32 relationIndex = 0;
 	uint32 rangeDistributedRelationCount = 0;
@@ -2124,13 +2124,13 @@ ErrorIfUnsupportedShardDistribution(Query *query)
 		if (partitionMethod == DISTRIBUTE_BY_RANGE)
 		{
 			rangeDistributedRelationCount++;
-			distributedRelationIdList = lappend_oid(distributedRelationIdList,
+			partitionedRelationIdList = lappend_oid(partitionedRelationIdList,
 													relationId);
 		}
 		else if (partitionMethod == DISTRIBUTE_BY_HASH)
 		{
 			hashDistributedRelationCount++;
-			distributedRelationIdList = lappend_oid(distributedRelationIdList,
+			partitionedRelationIdList = lappend_oid(partitionedRelationIdList,
 													relationId);
 		}
 		else if (partitionMethod == DISTRIBUTE_BY_NONE)
@@ -2155,7 +2155,7 @@ ErrorIfUnsupportedShardDistribution(Query *query)
 								  "partitioned relations are unsupported")));
 	}
 
-	foreach(relationIdCell, distributedRelationIdList)
+	foreach(relationIdCell, partitionedRelationIdList)
 	{
 		Oid relationId = lfirst_oid(relationIdCell);
 		bool coPartitionedTables = false;

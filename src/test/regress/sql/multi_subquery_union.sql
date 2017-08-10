@@ -812,3 +812,6 @@ GROUP BY types
 ORDER BY types;
 
 SET citus.enable_router_execution TO true;
+
+DROP TABLE events_reference_table;
+DROP TABLE users_reference_table;
