@@ -29,7 +29,7 @@ install:
   # download and install HLL manually, as custom builds won't satisfy deps
   - apt-get download "postgresql-${PGVERSION}-hll=2.10.2.citus-1" && sudo dpkg --force-confold --force-confdef --force-all -i *hll*.deb
 before_script: citus_indent --quiet --check
-script: CFLAGS=-Werror pg_travis_multi_test check
+script: CFLAGS=-Werror pg_travis_multi_test check check-follower-cluster
 after_success:
   - sync_to_enterprise
   - bash <(curl -s https://codecov.io/bash)
