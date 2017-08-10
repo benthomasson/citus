@@ -253,7 +253,7 @@ CitusMaintenanceDaemonMain(Datum main_arg)
 	{
 		int rc;
 		int latchFlags = WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH;
-		double timeout = 0;
+		double timeout = 10000.0; /* use this if the deadlock detection is disabled */
 		bool foundDeadlock = false;
 
 		CHECK_FOR_INTERRUPTS();
@@ -264,28 +264,30 @@ CitusMaintenanceDaemonMain(Datum main_arg)
 		 * tasks should do their own time math about whether to re-run checks.
 		 */
 
-		/* the config value of 1000 means disabling the deadlock detection */
-		if (DistributedDeadlockDetectionTimeoutFactor != 1000)
+		/* the config value -1 disables the distributed deadlock detection  */
+		if (DistributedDeadlockDetectionTimeoutFactor != -1.0)
 		{
 			StartTransactionCommand();
 			foundDeadlock = CheckForDistributedDeadlocks();
 			CommitTransactionCommand();
-		}
 
-		/*
-		 * If we find any deadlocks, run the distributed deadlock detection
-		 * more often since it is quite possible that there are other
-		 * deadlocks needs to be resolved.
-		 *
-		 * Thus, we use 1/20 of the calculated value. With the default
-		 * values (i.e., deadlock_timeout 1 seconds,
-		 * citus.distributed_deadlock_detection_factor 2), we'd be able to cancel
-		 * ~10 distributed deadlocks per second.
-		 */
-		timeout = DistributedDeadlockDetectionTimeoutFactor * DeadlockTimeout;
-		if (foundDeadlock)
-		{
-			timeout = timeout / 20.0;
+			/*
+			 * If we find any deadlocks, run the distributed deadlock detection
+			 * more often since it is quite possible that there are other
+			 * deadlocks need to be resolved.
+			 *
+			 * Thus, we use 1/20 of the calculated value. With the default
+			 * values (i.e., deadlock_timeout 1 seconds,
+			 * citus.distributed_deadlock_detection_factor 2), we'd be able to cancel
+			 * ~10 distributed deadlocks per second.
+			 */
+			timeout =
+				DistributedDeadlockDetectionTimeoutFactor * (double) DeadlockTimeout;
+
+			if (foundDeadlock)
+			{
+				timeout = timeout / 20.0;
+			}
 		}
 
 		/*

@@ -244,7 +244,7 @@ push(@pgOptions, '-c', "citus.node_connection_timeout=${connectionTimeout}");
 if($isolationtester)
 {
    push(@pgOptions, '-c', "citus.log_distributed_deadlock_detection=on");
-   push(@pgOptions, '-c', "citus.distributed_deadlock_detection_factor=1000");
+   push(@pgOptions, '-c', "citus.distributed_deadlock_detection_factor=-1");
 }
 
 # Add externally added options last, so they overwrite the default ones above

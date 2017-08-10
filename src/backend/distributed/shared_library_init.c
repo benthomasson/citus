@@ -62,6 +62,8 @@ static void multi_log_hook(ErrorData *edata);
 static void CreateRequiredDirectories(void);
 static void RegisterCitusConfigVariables(void);
 static void WarningForEnableDeadlockPrevention(bool newval, void *extra);
+static bool ErrorIfNotASuitableDeadlockFactor(double *newval, void **extra,
+											  GucSource source);
 static void NormalizeWorkerListPath(void);
 
 
@@ -411,10 +413,10 @@ RegisterCitusConfigVariables(void)
 					 "1000, distributed deadlock detection is disabled."),
 		NULL,
 		&DistributedDeadlockDetectionTimeoutFactor,
-		2.0, 1.0, 1000.0,
+		2.0, -1.0, 1000.0,
 		PGC_SIGHUP,
 		0,
-		NULL, NULL, NULL);
+		ErrorIfNotASuitableDeadlockFactor, NULL, NULL);
 
 	DefineCustomBoolVariable(
 		"citus.enable_deadlock_prevention",
@@ -784,6 +786,27 @@ WarningForEnableDeadlockPrevention(bool newval, void *extra)
 	ereport(WARNING, (errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
 					  errmsg("citus.enable_deadlock_prevention is deprecated and it has "
 							 "no effect. The flag will be removed in the next release.")));
+}
+
+
+/*
+ * We don't want to allow values less than 1.0. However, we define -1 as the value to disable
+ * distributed deadlock checking. Here we enforce our special constraint.
+ */
+static bool
+ErrorIfNotASuitableDeadlockFactor(double *newval, void **extra, GucSource source)
+{
+	if (*newval <= 1.0 && *newval != -1.0)
+	{
+		ereport(WARNING, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						  errmsg(
+							  "citus.distributed_deadlock_detection_factor cannot be less than 1. "
+							  "To disable distributed deadlock detection set the value to -1.")));
+
+		return false;
+	}
+
+	return true;
 }
 
 
